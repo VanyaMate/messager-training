@@ -1,21 +1,25 @@
 'use client';
 
 import axios from 'axios';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { FieldValues, SubmitHandler, useForm } from 'react-hook-form';
 import Input from '@/app/components/ui/inputs/input';
 import Button from '@/app/components/ui/buttons/button';
 import AuthSocialButton from '@/app/(site)/components/auth-social-button';
 import { BsGithub, BsGoogle } from 'react-icons/bs';
 import toast from 'react-hot-toast';
+import { signIn, useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 
 
 type Variant = 'LOGIN' | 'REGISTER';
 
 const AuthForm = () => {
-    const [ variant, setVariant ]              = useState<Variant>('LOGIN');
-    const [ isLoading, setIsLoading ]          = useState<boolean>(false);
-    const toggleVariant                        = useCallback(() => {
+    const session                     = useSession();
+    const router                      = useRouter();
+    const [ variant, setVariant ]     = useState<Variant>('LOGIN');
+    const [ isLoading, setIsLoading ] = useState<boolean>(false);
+    const toggleVariant               = useCallback(() => {
         setVariant((prev) => prev === 'LOGIN' ? 'REGISTER' : 'LOGIN');
     }, [ variant ]);
     const {
@@ -24,13 +28,20 @@ const AuthForm = () => {
               formState: {
                   errors,
               },
-          }                                    = useForm<FieldValues>({
+          }                           = useForm<FieldValues>({
         defaultValues: {
             name    : '',
             email   : '',
             password: '',
         },
     });
+
+    useEffect(() => {
+        if (session?.status === 'authenticated') {
+            router.push('/users');
+        }
+    }, [ session?.status, router ]);
+
     const onSubmit: SubmitHandler<FieldValues> = (data) => {
         setIsLoading(true);
         toast.dismiss('RegError');
@@ -45,6 +56,7 @@ const AuthForm = () => {
                     position: 'bottom-right',
                     duration: 2000,
                 }))
+                .then(() => signIn('credentials', data))
                 .catch(() => toast.error('Registration Error!', {
                     position: 'bottom-right',
                     id      : 'RegError',
@@ -52,13 +64,45 @@ const AuthForm = () => {
                 .finally(() => setIsLoading(false))
                 .finally(() => toast.dismiss('Registration'));
         } else if (variant === 'LOGIN') {
-            // axios.post('/api/')
+            signIn('credentials', {
+                ...data,
+                redirect: false,
+            })
+                .then((response) => {
+                    if (response?.error) {
+                        toast.error('Invalid credentials', {
+                            position: 'bottom-right',
+                        });
+                    }
+                    if (response?.ok && !response?.error) {
+                        toast.success('Welcome', {
+                            duration: 2000,
+                            position: 'bottom-right',
+                        });
+                        router.push('/users');
+                    }
+                })
+                .finally(() => setIsLoading(false));
         }
     };
     const socialAction                         = (action: string) => {
         setIsLoading(true);
 
-        // NextAuth social SignIn
+        signIn(action, { redirect: false })
+            .then((response) => {
+                if (response?.error) {
+                    toast.error('Invalid credentials', {
+                        position: 'bottom-right',
+                    });
+                }
+                if (response?.ok && !response?.error) {
+                    toast.success('Welcome', {
+                        duration: 2000,
+                        position: 'bottom-right',
+                    });
+                }
+            })
+            .finally(() => setIsLoading(false));
     };
 
     return (
@@ -147,7 +191,7 @@ const AuthForm = () => {
                         />
                         <AuthSocialButton
                             icon={ BsGoogle }
-                            onClick={ () => socialAction('github') }
+                            onClick={ () => socialAction('google') }
                         />
                     </div>
                 </div>
